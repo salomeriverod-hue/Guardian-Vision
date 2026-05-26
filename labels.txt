@@ -1,2 +1,3 @@
 0 dueno
 1 dueno2
+2 desconocido
