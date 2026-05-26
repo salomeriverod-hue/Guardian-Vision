@@ -5,9 +5,17 @@
 import streamlit as st
 import paho.mqtt.client as mqtt
 import json
-from PIL import Image
+from PIL import Image, ImageOps
+import numpy as np
 from bokeh.models import Button, CustomJS
 from streamlit_bokeh_events import streamlit_bokeh_events
+
+# --- Librerías añadidas para Teachable Machine de forma segura ---
+try:
+    import tensorflow as tf
+    from keras.models import load_model
+except ImportError:
+    pass
 
 # =========================================================
 # CONFIGURACIÓN GENERAL
@@ -99,6 +107,7 @@ with st.sidebar:
     st.write("Presiona ESCUCHAR y di:")
     st.write("- enciende la alarma")
     st.write("- apaga la alarma")
+    st.write("- **Palabra Clave:** 'abrete sesamo' para desbloquear.")
 
     st.write("### 🔘 Control Manual")
     st.write("- Botón ENCENDER")
@@ -117,7 +126,11 @@ TOPIC = "voice_ctrl"
 
 @st.cache_resource
 def setup_mqtt():
-    client = mqtt.Client(client_id="ANGIE_GUARD")
+    # Mantenemos compatibilidad universal con librerías Paho antiguas y nuevas
+    try:
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id="ANGIE_GUARD")
+    except AttributeError:
+        client = mqtt.Client(client_id="ANGIE_GUARD")
     try:
         client.connect(BROKER, PORT, 60)
     except:
@@ -135,6 +148,13 @@ if "alarma_activa" not in st.session_state:
 if "ultimo_comando" not in st.session_state:
     st.session_state.ultimo_comando = "Sin comandos aún"
 
+# --- Nuevas variables de estado para la Puerta Inteligente ---
+if "intentos_fallidos" not in st.session_state:
+    st.session_state.intentos_fallidos = 0
+
+if "puerta_desbloqueada" not in st.session_state:
+    st.session_state.puerta_desbloqueada = False
+
 # =========================================================
 # FUNCIÓN MQTT
 # =========================================================
@@ -146,6 +166,33 @@ def enviar_mqtt(mensaje):
         pass
 
 # =========================================================
+# FUNCIÓN MODELO TEACHABLE MACHINE
+# =========================================================
+@st.cache_resource
+def cargar_modelo_tm():
+    try:
+        model = load_model("keras_model.h5", compile=False)
+        with open("labels.txt", "r") as f:
+            class_names = f.readlines()
+        return model, class_names
+    except:
+        return None, None
+
+modelo_tm, clases_tm = cargar_modelo_tm()
+
+# =========================================================
+# LÓGICA DE ALERTA GLOBAL (Aviso grande si supera 2 intentos)
+# =========================================================
+if st.session_state.intentos_fallidos >= 2:
+    st.markdown("""
+    <div style="background-color:#7f1d1d; padding:30px; border-radius:15px; border:5px solid #ef4444; text-align:center; margin-bottom:20px;">
+        <h1 style="color:#fca5a5 !important; font-size:45px; font-weight:bold; margin:0;">🚨 ALERTA MÁXIMA: SISTEMA BLOQUEADO 🚨</h1>
+        <p style="color:white !important; font-size:20px; margin-top:10px;">Se han superado los 2 intentos de acceso fallidos. Puerta asegurada.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    enviar_mqtt("intruso") # Envía alerta al Wokwi de inmediato
+
+# =========================================================
 # LAYOUT
 # =========================================================
 col1, col2 = st.columns([1, 2])
@@ -155,8 +202,13 @@ col1, col2 = st.columns([1, 2])
 # =========================================================
 with col1:
 
-    # ESTADO
-    if st.session_state.alarma_activa:
+    # ESTADO (Modificado visualmente si la puerta se desbloquea exitosamente)
+    if st.session_state.puerta_desbloqueada:
+        panel_bg = "#dcfce7"
+        panel_border = "#16a34a"
+        panel_text = "#166534"
+        estado_texto = "🔓 PUERTA DESBLOQUEADA"
+    elif st.session_state.alarma_activa:
         panel_bg = "#dcfce7"
         panel_border = "#16a34a"
         panel_text = "#166534"
@@ -225,19 +277,22 @@ with col1:
     )
 
     # =====================================================
-    # PROCESAR VOZ CORREGIDO
+    # PROCESAR VOZ COMPLEMENTADO
     # =====================================================
     if result:
-        st.write("DEBUG RESULTADO:", result)
-
         if "GET_TEXT" in result:
             comando = result.get("GET_TEXT", "").strip().lower()
-
             st.session_state.ultimo_comando = comando
 
-            st.success(f"🎤 Se escuchó: {comando}")
-
-            if (
+            # --- NUEVA LÓGICA: OPCIÓN 1 - PALABRA CLAVE ---
+            if "abrete sesamo" in comando:
+                st.session_state.puerta_desbloqueada = True
+                st.session_state.intentos_fallidos = 0 # Reinicia intentos
+                enviar_mqtt("verde_on") # Comando específico para encender bombillo verde
+                st.balloons()
+            
+            # Comandos base respetados
+            elif (
                 "enciende la alarma" in comando or
                 "activar alarma" in comando or
                 "enciende alarma" in comando or
@@ -256,11 +311,16 @@ with col1:
                 "apagar" in comando
             ):
                 st.session_state.alarma_activa = False
+                st.session_state.puerta_desbloqueada = False
                 enviar_mqtt("desactivado")
                 st.warning("🔴 Alarma DESACTIVADA")
 
+            # Si dice otra frase que no coincide con la palabra clave ni comandos base
             else:
-                st.error("⚠️ Comando no reconocido. Intenta de nuevo.")
+                st.session_state.intentos_fallidos += 1
+                st.session_state.puerta_desbloqueada = False
+                enviar_mqtt("rojo_on") # Enciende bombillo rojo en Wokwi
+                st.error(f"⚠️ Palabra clave incorrecta. Intentos fallidos: {st.session_state.intentos_fallidos}/2")
 
     # =====================================================
     # ÚLTIMO COMANDO
@@ -278,6 +338,8 @@ with col1:
 
     if st.button("🔴 APAGAR ALARMA"):
         st.session_state.alarma_activa = False
+        st.session_state.puerta_desbloqueada = False
+        st.session_state.intentos_fallidos = 0
         st.session_state.ultimo_comando = "Apagado manual"
         enviar_mqtt("desactivado")
 
@@ -299,25 +361,53 @@ with col1:
     """, unsafe_allow_html=True)
 
 # =========================================================
-# PANEL DERECHO - CÁMARA
+# PANEL DERECHO - CÁMARA (CON RECONOCIMIENTO FACIAL TM)
 # =========================================================
 with col2:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-
     st.markdown("<h2 style='color:black;'>📸 Cámara de Vigilancia</h2>", unsafe_allow_html=True)
 
     foto = st.camera_input("Toma una captura de seguridad")
 
     if foto is not None:
         imagen = Image.open(foto)
-
         st.image(imagen, caption="Captura actual", use_container_width=True)
 
-        if st.session_state.alarma_activa:
-            st.error("🚨 ALERTA: Presencia detectada")
-            enviar_mqtt("intruso")
+        # --- NUEVA LÓGICA: OPCIÓN 2 - RECONOCIMIENTO FACIAL TEACHABLE MACHINE ---
+        if modelo_tm is not None:
+            # Adecuar la imagen para el formato requerido por Teachable Machine
+            size = (224, 224)
+            image_resized = ImageOps.fit(imagen, size, Image.Resampling.LENS)
+            image_array = np.asarray(image_resized)
+            normalized_image_array = (image_array.astype(np.float32) / 127.5) - 1
+            data = np.reshape(normalized_image_array, (1, 224, 224, 3))
+
+            # Predicción
+            prediction = modelo_tm.predict(data)
+            index = np.argmax(prediction)
+            class_name = clases_tm[index].strip()
+            confidence_score = prediction[0][index]
+
+            st.write(f"**Resultado Escaneo:** {class_name} ({confidence_score*100:.2f}%)")
+
+            # Supongamos que tu clase index 0 en labels.txt es "Dueno" o "Propietario"
+            if "dueno" in class_name.lower() or "propietario" in class_name.lower() and confidence_score > 0.80:
+                st.session_state.puerta_desbloqueada = True
+                st.session_state.intentos_fallidos = 0
+                st.success("🔓 Rostro reconocido. ¡Acceso concedido!")
+                enviar_mqtt("verde_on")
+            else:
+                st.session_state.intentos_fallidos += 1
+                st.session_state.puerta_desbloqueada = False
+                st.error("❌ Rostro Desconocido. Acceso denegado.")
+                enviar_mqtt("rojo_on")
         else:
-            st.success("✅ Monitoreo realizado (alarma apagada)")
+            # Lógica alternativa por si no se encuentra el archivo .h5 del modelo en GitHub
+            if st.session_state.alarma_activa:
+                st.error("🚨 ALERTA: Presencia detectada")
+                enviar_mqtt("intruso")
+            else:
+                st.success("✅ Monitoreo realizado (alarma apagada)")
 
     else:
         st.markdown(
