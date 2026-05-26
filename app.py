@@ -183,85 +183,108 @@ with col1:
     # =====================================================
     # BOTÓN VOZ
     # =====================================================
-    stt_button = Button(label="🎙️ ESCUCHAR", width=240, height=70)
+   # =====================================================
+# BOTÓN VOZ
+# REEMPLAZA TODA TU SECCIÓN DE VOZ POR ESTA
+# =====================================================
 
-    stt_button.js_on_event("button_click", CustomJS(code="""
-        var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+st.write("🎙️ Toca el botón y habla")
 
-        if (!SpeechRecognition) {
-            alert("El navegador no soporta reconocimiento de voz");
-        } else {
-            var recognition = new SpeechRecognition();
+stt_button = Button(label="🎤 ESCUCHAR", width=240, height=70)
 
-            recognition.lang = 'es-ES';
-            recognition.continuous = false;
-            recognition.interimResults = false;
+stt_button.js_on_event("button_click", CustomJS(code="""
+    var recognition = new webkitSpeechRecognition();
 
-            recognition.onresult = function(e) {
-                var value = e.results[0][0].transcript;
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "es-ES";
 
-                document.dispatchEvent(
-                    new CustomEvent("GET_TEXT", {
-                        detail: value
-                    })
-                );
-            };
+    recognition.onresult = function (e) {
 
-            recognition.onerror = function(e) {
-                console.log("Error:", e.error);
-            };
+        var value = "";
 
-            recognition.start();
+        for (var i = e.resultIndex; i < e.results.length; ++i) {
+
+            if (e.results[i].isFinal) {
+
+                value += e.results[i][0].transcript;
+            }
         }
-    """))
 
-    result = streamlit_bokeh_events(
-        stt_button,
-        events="GET_TEXT",
-        key="listen",
-        refresh_on_update=False,
-        override_height=90,
-        debounce_time=0
-    )
+        if (value != "") {
 
-    # =====================================================
-    # PROCESAR VOZ CORREGIDO
-    # =====================================================
-    if result:
-        st.write("DEBUG RESULTADO:", result)
+            document.dispatchEvent(
+                new CustomEvent("GET_TEXT", {
+                    detail: value
+                })
+            );
+        }
+    };
 
-        if "GET_TEXT" in result:
-            comando = result.get("GET_TEXT", "").strip().lower()
+    recognition.start();
+"""))
 
-            st.session_state.ultimo_comando = comando
+result = streamlit_bokeh_events(
+    stt_button,
+    events="GET_TEXT",
+    key="listen",
+    refresh_on_update=False,
+    override_height=90,
+    debounce_time=0
+)
 
-            st.success(f"🎤 Se escuchó: {comando}")
+# =====================================================
+# PROCESAR COMANDO DE VOZ
+# =====================================================
 
-            if (
-                "enciende la alarma" in comando or
-                "activar alarma" in comando or
-                "enciende alarma" in comando or
-                "activar" in comando or
-                "encender" in comando
-            ):
-                st.session_state.alarma_activa = True
-                enviar_mqtt("activado")
-                st.success("🟢 Alarma ACTIVADA")
+if result:
 
-            elif (
-                "apaga la alarma" in comando or
-                "desactiva la alarma" in comando or
-                "apaga alarma" in comando or
-                "desactivar" in comando or
-                "apagar" in comando
-            ):
-                st.session_state.alarma_activa = False
-                enviar_mqtt("desactivado")
-                st.warning("🔴 Alarma DESACTIVADA")
+    if "GET_TEXT" in result:
 
-            else:
-                st.error("⚠️ Comando no reconocido. Intenta de nuevo.")
+        comando = result.get("GET_TEXT").strip().lower()
 
+        st.success(f"🎤 Se escuchó: {comando}")
+
+        st.session_state.ultimo_comando = comando
+
+        # =================================================
+        # ABRIR
+        # =================================================
+        if (
+            "abrir" in comando or
+            "abre" in comando or
+            "abre la puerta" in comando or
+            "abrir puerta" in comando
+        ):
+
+            st.success("🟢 PUERTA ABIERTA")
+
+            st.session_state.alarma_activa = False
+
+            enviar_mqtt("Abre")
+
+        # =================================================
+        # CERRAR
+        # =================================================
+        elif (
+            "cerrar" in comando or
+            "cierra" in comando or
+            "cierra la puerta" in comando or
+            "cerrar puerta" in comando
+        ):
+
+            st.error("🔴 PUERTA CERRADA")
+
+            st.session_state.alarma_activa = True
+
+            enviar_mqtt("Cierra")
+
+        # =================================================
+        # NO RECONOCIDO
+        # =================================================
+        else:
+
+            st.warning("⚠️ Comando no reconocido")
     # =====================================================
     # ÚLTIMO COMANDO
     # =====================================================
