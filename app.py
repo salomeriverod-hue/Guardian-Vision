@@ -109,8 +109,8 @@ with st.sidebar:
     st.write("- Botón APAGAR")
 
     st.write("### 📸 Reconocimiento Facial")
-    st.write("Clases permitidas:")
-    st.code("dueno\ndueno2")
+    st.write("Clases del modelo:")
+    st.code("dueno\ndueno2\ndesconocido")
 
 # =========================================================
 # MQTT
@@ -234,7 +234,7 @@ with col1:
     </div>
     """, unsafe_allow_html=True)
 
-      # =====================================================
+    # =====================================================
     # BOTÓN VOZ
     # =====================================================
     stt_button = Button(label="🎙️ ESCUCHAR", width=240, height=70)
@@ -245,6 +245,7 @@ with col1:
         if (!SpeechRecognition) {
             alert("El navegador no soporta reconocimiento de voz");
         } else {
+
             var recognition = new SpeechRecognition();
 
             recognition.lang = 'es-ES';
@@ -252,6 +253,7 @@ with col1:
             recognition.interimResults = false;
 
             recognition.onresult = function(e) {
+
                 var value = e.results[0][0].transcript;
 
                 document.dispatchEvent(
@@ -259,10 +261,6 @@ with col1:
                         detail: value
                     })
                 );
-            };
-
-            recognition.onerror = function(e) {
-                console.log("Error:", e.error);
             };
 
             recognition.start();
@@ -279,12 +277,12 @@ with col1:
     )
 
     # =====================================================
-    # PROCESAR VOZ CORREGIDO
+    # PROCESAR VOZ
     # =====================================================
     if result:
-        st.write("DEBUG RESULTADO:", result)
 
         if "GET_TEXT" in result:
+
             comando = result.get("GET_TEXT", "").strip().lower()
 
             st.session_state.ultimo_comando = comando
@@ -298,8 +296,11 @@ with col1:
                 "activar" in comando or
                 "encender" in comando
             ):
+
                 st.session_state.alarma_activa = True
-                enviar_mqtt("activado")
+
+                enviar_mqtt("Cierra")
+
                 st.success("🟢 Alarma ACTIVADA")
 
             elif (
@@ -309,12 +310,16 @@ with col1:
                 "desactivar" in comando or
                 "apagar" in comando
             ):
+
                 st.session_state.alarma_activa = False
-                enviar_mqtt("desactivado")
+
+                enviar_mqtt("Abre")
+
                 st.warning("🔴 Alarma DESACTIVADA")
 
             else:
-                st.error("⚠️ Comando no reconocido. Intenta de nuevo.")
+
+                st.error("⚠️ Comando no reconocido")
 
     # =====================================================
     # ÚLTIMO COMANDO
@@ -387,23 +392,9 @@ with col2:
         dueños = ["dueno", "dueno2"]
 
         # =====================================================
-        # SI LA CONFIANZA ES MENOR A 40%
-        # SE CONSIDERA DESCONOCIDO
-        # =====================================================
-        if porcentaje < 70:
-
-            st.error("🚨 PERSONA DESCONOCIDA")
-
-            st.write("Confianza demasiado baja para reconocer al dueño.")
-
-            st.session_state.alarma_activa = True
-
-            enviar_mqtt("Alarma")
-
-        # =====================================================
         # DUEÑO RECONOCIDO
         # =====================================================
-        elif clase.lower() in dueños:
+        if clase.lower() in dueños and porcentaje >= 40:
 
             st.success("✅ Dueño reconocido")
 
