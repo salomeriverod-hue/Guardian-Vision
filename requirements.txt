@@ -1,7 +1,8 @@
-streamlit==1.32.2
-paho-mqtt==1.6.1
-numpy==1.26.4
-Pillow==10.2.0
-opencv-python-headless==4.9.0.80
-streamlit-bokeh-events==0.1.2
+streamlit
+paho-mqtt
 bokeh==2.4.3
+streamlit-bokeh-events
+tensorflow
+pillow
+numpy
+
