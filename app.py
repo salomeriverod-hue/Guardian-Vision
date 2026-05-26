@@ -395,7 +395,7 @@ with col2:
         # SI LA CONFIANZA ES MENOR A 40%
         # SE CONSIDERA DESCONOCIDO
         # =====================================================
-        if porcentaje < 40:
+        if porcentaje < 70:
 
             st.error("🚨 PERSONA DESCONOCIDA")
 
