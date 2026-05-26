@@ -234,7 +234,7 @@ with col1:
     </div>
     """, unsafe_allow_html=True)
 
-    # =====================================================
+      # =====================================================
     # BOTÓN VOZ
     # =====================================================
     stt_button = Button(label="🎙️ ESCUCHAR", width=240, height=70)
@@ -245,7 +245,6 @@ with col1:
         if (!SpeechRecognition) {
             alert("El navegador no soporta reconocimiento de voz");
         } else {
-
             var recognition = new SpeechRecognition();
 
             recognition.lang = 'es-ES';
@@ -253,7 +252,6 @@ with col1:
             recognition.interimResults = false;
 
             recognition.onresult = function(e) {
-
                 var value = e.results[0][0].transcript;
 
                 document.dispatchEvent(
@@ -261,6 +259,10 @@ with col1:
                         detail: value
                     })
                 );
+            };
+
+            recognition.onerror = function(e) {
+                console.log("Error:", e.error);
             };
 
             recognition.start();
@@ -277,12 +279,12 @@ with col1:
     )
 
     # =====================================================
-    # PROCESAR VOZ
+    # PROCESAR VOZ CORREGIDO
     # =====================================================
     if result:
+        st.write("DEBUG RESULTADO:", result)
 
         if "GET_TEXT" in result:
-
             comando = result.get("GET_TEXT", "").strip().lower()
 
             st.session_state.ultimo_comando = comando
@@ -296,11 +298,8 @@ with col1:
                 "activar" in comando or
                 "encender" in comando
             ):
-
                 st.session_state.alarma_activa = True
-
-                enviar_mqtt("Cierra")
-
+                enviar_mqtt("activado")
                 st.success("🟢 Alarma ACTIVADA")
 
             elif (
@@ -310,16 +309,12 @@ with col1:
                 "desactivar" in comando or
                 "apagar" in comando
             ):
-
                 st.session_state.alarma_activa = False
-
-                enviar_mqtt("Abre")
-
+                enviar_mqtt("desactivado")
                 st.warning("🔴 Alarma DESACTIVADA")
 
             else:
-
-                st.error("⚠️ Comando no reconocido")
+                st.error("⚠️ Comando no reconocido. Intenta de nuevo.")
 
     # =====================================================
     # ÚLTIMO COMANDO
