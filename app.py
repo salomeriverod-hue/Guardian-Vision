@@ -1,7 +1,7 @@
 # =========================================================
 # GUARDIAN VISION - INTEGRADO CON TEACHABLE MACHINE + WOKWI
 # =========================================================
-
+ 
 import streamlit as st
 import paho.mqtt.client as mqtt
 import json
@@ -10,7 +10,7 @@ from PIL import Image
 import io
 from bokeh.models import Button, CustomJS
 from streamlit_bokeh_events import streamlit_bokeh_events
-
+ 
 # =========================================================
 # IMPORTANTE: Instala estas dependencias antes de correr
 # pip install streamlit paho-mqtt bokeh streamlit-bokeh-events
@@ -23,7 +23,7 @@ from streamlit_bokeh_events import streamlit_bokeh_events
 # 4. Descarga keras_model.h5 y labels.txt
 # 5. Ponlos en la misma carpeta que este script
 # =========================================================
-
+ 
 # =========================================================
 # CONFIGURACIÓN GENERAL
 # =========================================================
@@ -33,7 +33,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
+ 
 # =========================================================
 # ESTILOS
 # =========================================================
@@ -65,7 +65,7 @@ div.bk-root {
 }
 </style>
 """, unsafe_allow_html=True)
-
+ 
 # =========================================================
 # HEADER
 # =========================================================
@@ -75,7 +75,7 @@ st.markdown("""
     <h3>Sistema Inteligente de Seguridad | Voz + Cámara + MQTT</h3>
 </div>
 """, unsafe_allow_html=True)
-
+ 
 # =========================================================
 # SIDEBAR
 # =========================================================
@@ -94,14 +94,14 @@ with st.sidebar:
     st.code("keras_model.h5\nlabels.txt")
     st.write("Clases esperadas en labels.txt:")
     st.code("0 dueno\n1 desconocido")
-
+ 
 # =========================================================
 # MQTT — topic y payload alineados con el ESP32
 # =========================================================
 BROKER = "broker.mqttdashboard.com"
 PORT = 1883
 TOPIC = "IMIA"   # mismo topic que el ESP32
-
+ 
 @st.cache_resource
 def setup_mqtt():
     client = mqtt.Client(client_id="GUARDIAN_VISION")
@@ -110,9 +110,9 @@ def setup_mqtt():
     except Exception as e:
         st.warning(f"MQTT no conectado: {e}")
     return client
-
+ 
 mqtt_client = setup_mqtt()
-
+ 
 def enviar_mqtt(accion: str):
     """
     accion: "Abre" o "Cierra"
@@ -125,7 +125,7 @@ def enviar_mqtt(accion: str):
     except Exception as e:
         st.error(f"Error MQTT: {e}")
         return False
-
+ 
 # =========================================================
 # CARGAR MODELO TEACHABLE MACHINE
 # =========================================================
@@ -146,9 +146,9 @@ def cargar_modelo():
     except Exception as e:
         st.error(f"Error cargando modelo: {e}")
         return None, None
-
+ 
 modelo, labels = cargar_modelo()
-
+ 
 def clasificar_imagen(imagen_pil):
     """
     Recibe una imagen PIL, la preprocesa y retorna (clase, confianza).
@@ -169,7 +169,7 @@ def clasificar_imagen(imagen_pil):
     except Exception as e:
         st.error(f"Error en clasificación: {e}")
         return None, 0.0
-
+ 
 # =========================================================
 # SESSION STATE
 # =========================================================
@@ -179,17 +179,17 @@ if "ultimo_comando" not in st.session_state:
     st.session_state.ultimo_comando = "Sin comandos aún"
 if "ultimo_resultado_facial" not in st.session_state:
     st.session_state.ultimo_resultado_facial = ""
-
+ 
 # =========================================================
 # LAYOUT
 # =========================================================
 col1, col2 = st.columns([1, 2])
-
+ 
 # =========================================================
 # PANEL IZQUIERDO — Voz + Estado + Botones manuales
 # =========================================================
 with col1:
-
+ 
     if st.session_state.puerta_abierta:
         panel_bg    = "#dcfce7"
         panel_border= "#16a34a"
@@ -200,14 +200,14 @@ with col1:
         panel_border= "#dc2626"
         panel_text  = "#991b1b"
         estado_texto= "🔴 PUERTA CERRADA"
-
+ 
     st.markdown(f"""
     <div style="background-color:{panel_bg};padding:25px;border-radius:18px;
                 border:3px solid {panel_border};margin-bottom:20px;">
         <h2 style="color:black;text-align:center;">🎙️ Control por Voz</h2>
     </div>
     """, unsafe_allow_html=True)
-
+ 
     # ----- BOTÓN VOZ -----
     stt_button = Button(label="🎙️ ESCUCHAR", width=240, height=70)
     stt_button.js_on_event("button_click", CustomJS(code="""
@@ -221,21 +221,21 @@ with col1:
         r.onerror = function(e) { console.log("Error voz:", e.error); };
         r.start();
     """))
-
+ 
     result = streamlit_bokeh_events(
         stt_button, events="GET_TEXT", key="listen",
         refresh_on_update=False, override_height=90, debounce_time=0
     )
-
+ 
     # ----- PROCESAR VOZ -----
     if result and "GET_TEXT" in result:
         comando = result.get("GET_TEXT", "").strip().lower()
         st.session_state.ultimo_comando = f"🎤 {comando}"
         st.success(f"Se escuchó: **{comando}**")
-
+ 
         palabras_abrir = ["abre", "abrir", "abre la puerta", "abrir puerta", "open"]
         palabras_cerrar= ["cierra", "cerrar", "cierra la puerta", "cerrar puerta", "close"]
-
+ 
         if any(p in comando for p in palabras_abrir):
             if enviar_mqtt("Abre"):
                 st.session_state.puerta_abierta = True
@@ -246,24 +246,24 @@ with col1:
                 st.warning("🔴 Puerta CERRADA — LED rojo encendido")
         else:
             st.error("⚠️ Comando no reconocido. Di 'abre la puerta' o 'cierra la puerta'.")
-
+ 
     # ----- ÚLTIMO COMANDO -----
     st.markdown("<h3 style='color:black;'>🗣️ Último comando:</h3>", unsafe_allow_html=True)
     st.info(st.session_state.ultimo_comando)
-
+ 
     # ----- BOTONES MANUALES -----
     if st.button("🟢 ABRIR PUERTA"):
         if enviar_mqtt("Abre"):
             st.session_state.puerta_abierta = True
             st.session_state.ultimo_comando = "Apertura manual"
             st.success("🟢 Puerta abierta manualmente")
-
+ 
     if st.button("🔴 CERRAR PUERTA"):
         if enviar_mqtt("Cierra"):
             st.session_state.puerta_abierta = False
             st.session_state.ultimo_comando = "Cierre manual"
             st.warning("🔴 Puerta cerrada manualmente")
-
+ 
     # ----- ESTADO DEL SISTEMA -----
     st.markdown(f"""
     <div style="background-color:{panel_bg};padding:20px;border-radius:15px;
@@ -272,35 +272,35 @@ with col1:
         <h2 style="color:{panel_text};">{estado_texto}</h2>
     </div>
     """, unsafe_allow_html=True)
-
+ 
     # ----- ESTADO DEL MODELO -----
     if modelo is not None:
         st.success(f"✅ Modelo cargado | Clases: {', '.join(labels)}")
     else:
         st.warning("⚠️ keras_model.h5 no encontrado. Solo funcionará control por voz.")
-
+ 
 # =========================================================
 # PANEL DERECHO — Cámara + Reconocimiento Facial
 # =========================================================
 with col2:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown("<h2 style='color:black;'>📸 Reconocimiento Facial</h2>", unsafe_allow_html=True)
-
+ 
     # Umbral de confianza configurable
     umbral = st.slider("Umbral de confianza para reconocer al dueño", 0.5, 1.0, 0.85, 0.05)
-
+ 
     foto = st.camera_input("Toma una foto para verificar identidad")
-
+ 
     if foto is not None:
         imagen = Image.open(foto)
         st.image(imagen, caption="Foto capturada", use_container_width=True)
-
+ 
         if modelo is not None:
             with st.spinner("Analizando identidad..."):
                 clase, confianza = clasificar_imagen(imagen)
-
+ 
             st.markdown(f"**Resultado:** `{clase}` con `{confianza*100:.1f}%` de confianza")
-
+ 
             if clase == "dueno" and confianza >= umbral:
                 # ✅ Es el dueño → abrir puerta
                 enviar_mqtt("Abre")
@@ -309,14 +309,14 @@ with col2:
                 st.session_state.ultimo_comando = "Reconocimiento facial exitoso"
                 st.success(f"✅ ¡Dueño reconocido! Puerta abierta — LED verde encendido")
                 st.balloons()
-
+ 
             elif clase == "dueno" and confianza < umbral:
                 # Parecido pero debajo del umbral
                 enviar_mqtt("Cierra")
                 st.session_state.puerta_abierta = False
                 st.session_state.ultimo_resultado_facial = f"⚠️ Confianza baja ({confianza*100:.1f}%)"
                 st.warning(f"⚠️ Confianza baja ({confianza*100:.1f}%). Intenta de nuevo con mejor iluminación.")
-
+ 
             else:
                 # ❌ Desconocido → cerrar y alertar
                 enviar_mqtt("Cierra")
@@ -324,25 +324,25 @@ with col2:
                 st.session_state.ultimo_resultado_facial = f"🚨 Desconocido detectado ({confianza*100:.1f}%)"
                 st.session_state.ultimo_comando = "Intento de acceso denegado"
                 st.error(f"🚨 ACCESO DENEGADO — Persona no reconocida. LED rojo encendido.")
-
+ 
         else:
             # Sin modelo: solo muestra la foto como monitoreo
             st.info("📷 Monitoreo activo (carga keras_model.h5 para activar reconocimiento facial)")
             if st.session_state.puerta_abierta:
                 st.warning("⚠️ Presencia detectada con puerta abierta")
-
+ 
         # Último resultado facial
         if st.session_state.ultimo_resultado_facial:
             st.markdown(f"**Último análisis:** {st.session_state.ultimo_resultado_facial}")
-
+ 
     else:
         st.markdown(
             "<h3 style='color:black;text-align:center;'>📷 Esperando captura...</h3>",
             unsafe_allow_html=True
         )
-
+ 
     st.markdown('</div>', unsafe_allow_html=True)
-
+ 
 # =========================================================
 # FOOTER
 # =========================================================
@@ -352,3 +352,4 @@ st.markdown(
     "Angie Vargas · Isabella Saldarriaga · Salomé Rivero</p>",
     unsafe_allow_html=True
 )
+ 
