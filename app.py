@@ -1,5 +1,5 @@
 # =========================================================
-# GUARDIAN VISION - VOZ + TEACHABLE MACHINE + WOKWI
+# GUARDIAN VISION - CÓDIGO COMPLETO CON VOZ CORREGIDA
 # =========================================================
 
 import streamlit as st
@@ -8,8 +8,6 @@ import json
 from PIL import Image
 from bokeh.models import Button, CustomJS
 from streamlit_bokeh_events import streamlit_bokeh_events
-import numpy as np
-import tensorflow as tf
 
 # =========================================================
 # CONFIGURACIÓN GENERAL
@@ -26,7 +24,6 @@ st.set_page_config(
 # =========================================================
 st.markdown("""
 <style>
-
 .stApp {
     background-color: white !important;
 }
@@ -80,7 +77,6 @@ div.bk-root {
     margin-top: 10px !important;
     margin-bottom: 10px !important;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -98,137 +94,80 @@ st.markdown("""
 # SIDEBAR
 # =========================================================
 with st.sidebar:
-
     st.title("📘 Instrucciones")
-
     st.write("### 🎙️ Control por Voz")
     st.write("Presiona ESCUCHAR y di:")
-    st.write("- abrir puerta")
-    st.write("- cerrar puerta")
+    st.write("- enciende la alarma")
+    st.write("- apaga la alarma")
 
     st.write("### 🔘 Control Manual")
-    st.write("- Abrir puerta")
-    st.write("- Cerrar puerta")
+    st.write("- Botón ENCENDER")
+    st.write("- Botón APAGAR")
 
-    st.write("### 📸 Reconocimiento Facial")
-    st.write("Clases:")
-    st.code("dueno\ndueno2\ndesconocido")
+    st.write("### 📸 Vigilancia")
+    st.write("Toma una foto para monitorear.")
+    st.write("Si la alarma está activa, enviará alerta MQTT.")
 
 # =========================================================
 # MQTT
 # =========================================================
 BROKER = "broker.mqttdashboard.com"
 PORT = 1883
-TOPIC = "IMIA"
+TOPIC = "voice_ctrl"
 
 @st.cache_resource
 def setup_mqtt():
-
-    client = mqtt.Client(client_id="GUARDIAN_VISION")
-
+    client = mqtt.Client(client_id="ANGIE_GUARD")
     try:
         client.connect(BROKER, PORT, 60)
     except:
         pass
-
     return client
 
 mqtt_client = setup_mqtt()
 
 # =========================================================
-# FUNCIÓN MQTT
-# =========================================================
-def enviar_mqtt(mensaje):
-
-    try:
-
-        payload = json.dumps({
-            "gesto": mensaje
-        })
-
-        mqtt_client.publish(TOPIC, payload)
-
-    except:
-        pass
-
-# =========================================================
-# CARGAR MODELO
-# =========================================================
-@st.cache_resource
-def cargar_modelo():
-
-    modelo = tf.keras.models.load_model(
-        "keras_model.h5",
-        compile=False
-    )
-
-    with open("labels.txt", "r") as f:
-
-        labels = [
-            line.strip().split(" ", 1)[1]
-            for line in f.readlines()
-        ]
-
-    return modelo, labels
-
-modelo, labels = cargar_modelo()
-
-# =========================================================
-# CLASIFICAR IMAGEN
-# =========================================================
-def clasificar_imagen(imagen_pil):
-
-    img = imagen_pil.convert("RGB").resize((224, 224))
-
-    arr = np.array(img, dtype=np.float32)
-
-    arr = (arr / 127.5) - 1
-
-    arr = np.expand_dims(arr, axis=0)
-
-    predicciones = modelo.predict(arr, verbose=0)
-
-    idx = np.argmax(predicciones[0])
-
-    confianza = float(predicciones[0][idx])
-
-    clase = labels[idx]
-
-    return clase, confianza
-
-# =========================================================
 # SESSION STATE
 # =========================================================
-if "puerta_abierta" not in st.session_state:
-    st.session_state.puerta_abierta = False
+if "alarma_activa" not in st.session_state:
+    st.session_state.alarma_activa = False
 
 if "ultimo_comando" not in st.session_state:
     st.session_state.ultimo_comando = "Sin comandos aún"
 
 # =========================================================
+# FUNCIÓN MQTT
+# =========================================================
+def enviar_mqtt(mensaje):
+    try:
+        payload = json.dumps({"Act1": mensaje})
+        mqtt_client.publish(TOPIC, payload)
+    except:
+        pass
+
+# =========================================================
 # LAYOUT
 # =========================================================
-col1, col2 = st.columns([1,2])
+col1, col2 = st.columns([1, 2])
 
 # =========================================================
 # PANEL IZQUIERDO
 # =========================================================
 with col1:
 
-    if st.session_state.puerta_abierta:
-
+    # ESTADO
+    if st.session_state.alarma_activa:
         panel_bg = "#dcfce7"
         panel_border = "#16a34a"
         panel_text = "#166534"
-        estado_texto = "🟢 PUERTA ABIERTA"
-
+        estado_texto = "🟢 ALARMA ACTIVADA"
     else:
-
         panel_bg = "#fee2e2"
         panel_border = "#dc2626"
         panel_text = "#991b1b"
-        estado_texto = "🔴 PUERTA CERRADA"
+        estado_texto = "🔴 ALARMA DESACTIVADA"
 
+    # TÍTULO
     st.markdown(f"""
     <div style="
         background-color:{panel_bg};
@@ -237,49 +176,43 @@ with col1:
         border:3px solid {panel_border};
         margin-bottom:20px;
     ">
-        <h2 style="color:black; text-align:center;">
-        🎙️ Control Inteligente
-        </h2>
+        <h2 style="color:black; text-align:center;">🎙️ Control Inteligente</h2>
     </div>
     """, unsafe_allow_html=True)
 
     # =====================================================
     # BOTÓN VOZ
     # =====================================================
-    st.write("🎙️ Toca el botón y habla")
-
-    stt_button = Button(label="🎤 ESCUCHAR", width=240, height=70)
+    stt_button = Button(label="🎙️ ESCUCHAR", width=240, height=70)
 
     stt_button.js_on_event("button_click", CustomJS(code="""
-        var recognition = new webkitSpeechRecognition();
+        var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-        recognition.continuous = false;
-        recognition.interimResults = false;
-        recognition.lang = "es-ES";
+        if (!SpeechRecognition) {
+            alert("El navegador no soporta reconocimiento de voz");
+        } else {
+            var recognition = new SpeechRecognition();
 
-        recognition.onresult = function (e) {
+            recognition.lang = 'es-ES';
+            recognition.continuous = false;
+            recognition.interimResults = false;
 
-            var value = "";
-
-            for (var i = e.resultIndex; i < e.results.length; ++i) {
-
-                if (e.results[i].isFinal) {
-
-                    value += e.results[i][0].transcript;
-                }
-            }
-
-            if (value != "") {
+            recognition.onresult = function(e) {
+                var value = e.results[0][0].transcript;
 
                 document.dispatchEvent(
                     new CustomEvent("GET_TEXT", {
                         detail: value
                     })
                 );
-            }
-        };
+            };
 
-        recognition.start();
+            recognition.onerror = function(e) {
+                console.log("Error:", e.error);
+            };
+
+            recognition.start();
+        }
     """))
 
     result = streamlit_bokeh_events(
@@ -292,85 +225,64 @@ with col1:
     )
 
     # =====================================================
-    # PROCESAR VOZ
+    # PROCESAR VOZ CORREGIDO
     # =====================================================
     if result:
+        st.write("DEBUG RESULTADO:", result)
 
         if "GET_TEXT" in result:
-
-            comando = result.get("GET_TEXT").strip().lower()
-
-            st.success(f"🎤 Se escuchó: {comando}")
+            comando = result.get("GET_TEXT", "").strip().lower()
 
             st.session_state.ultimo_comando = comando
 
-            # =============================================
-            # ABRIR
-            # =============================================
+            st.success(f"🎤 Se escuchó: {comando}")
+
             if (
-                "abrir" in comando or
-                "abre" in comando or
-                "abrir puerta" in comando or
-                "abre la puerta" in comando
+                "enciende la alarma" in comando or
+                "activar alarma" in comando or
+                "enciende alarma" in comando or
+                "activar" in comando or
+                "encender" in comando
             ):
+                st.session_state.alarma_activa = True
+                enviar_mqtt("activado")
+                st.success("🟢 Alarma ACTIVADA")
 
-                st.success("🟢 PUERTA ABIERTA")
-
-                st.session_state.puerta_abierta = True
-
-                enviar_mqtt("Abre")
-
-            # =============================================
-            # CERRAR
-            # =============================================
             elif (
-                "cerrar" in comando or
-                "cierra" in comando or
-                "cerrar puerta" in comando or
-                "cierra la puerta" in comando
+                "apaga la alarma" in comando or
+                "desactiva la alarma" in comando or
+                "apaga alarma" in comando or
+                "desactivar" in comando or
+                "apagar" in comando
             ):
-
-                st.error("🔴 PUERTA CERRADA")
-
-                st.session_state.puerta_abierta = False
-
-                enviar_mqtt("Cierra")
+                st.session_state.alarma_activa = False
+                enviar_mqtt("desactivado")
+                st.warning("🔴 Alarma DESACTIVADA")
 
             else:
-
-                st.warning("⚠️ Comando no reconocido")
+                st.error("⚠️ Comando no reconocido. Intenta de nuevo.")
 
     # =====================================================
     # ÚLTIMO COMANDO
     # =====================================================
-    st.markdown(
-        "<h3 style='color:black;'>🗣️ Último comando:</h3>",
-        unsafe_allow_html=True
-    )
-
+    st.markdown("<h3 style='color:black;'>🗣️ Último comando:</h3>", unsafe_allow_html=True)
     st.info(st.session_state.ultimo_comando)
 
     # =====================================================
     # BOTONES MANUALES
     # =====================================================
-    if st.button("🟢 ABRIR PUERTA"):
+    if st.button("🟢 ENCENDER ALARMA"):
+        st.session_state.alarma_activa = True
+        st.session_state.ultimo_comando = "Encendido manual"
+        enviar_mqtt("activado")
 
-        st.session_state.puerta_abierta = True
-
-        st.session_state.ultimo_comando = "Apertura manual"
-
-        enviar_mqtt("Abre")
-
-    if st.button("🔴 CERRAR PUERTA"):
-
-        st.session_state.puerta_abierta = False
-
-        st.session_state.ultimo_comando = "Cierre manual"
-
-        enviar_mqtt("Cierra")
+    if st.button("🔴 APAGAR ALARMA"):
+        st.session_state.alarma_activa = False
+        st.session_state.ultimo_comando = "Apagado manual"
+        enviar_mqtt("desactivado")
 
     # =====================================================
-    # ESTADO
+    # ESTADO DEL SISTEMA
     # =====================================================
     st.markdown(f"""
     <div style="
@@ -382,74 +294,32 @@ with col1:
         margin-top:20px;
     ">
         <h3 style="color:black;">📡 Estado del Sistema</h3>
-        <h2 style="color:{panel_text};">
-        {estado_texto}
-        </h2>
+        <h2 style="color:{panel_text};">{estado_texto}</h2>
     </div>
     """, unsafe_allow_html=True)
 
 # =========================================================
-# PANEL DERECHO
+# PANEL DERECHO - CÁMARA
 # =========================================================
 with col2:
-
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
-    st.markdown(
-        "<h2 style='color:black;'>📸 Reconocimiento Facial</h2>",
-        unsafe_allow_html=True
-    )
+    st.markdown("<h2 style='color:black;'>📸 Cámara de Vigilancia</h2>", unsafe_allow_html=True)
 
-    foto = st.camera_input("Toma una captura")
+    foto = st.camera_input("Toma una captura de seguridad")
 
     if foto is not None:
-
         imagen = Image.open(foto)
 
-        st.image(
-            imagen,
-            caption="Captura actual",
-            use_container_width=True
-        )
+        st.image(imagen, caption="Captura actual", use_container_width=True)
 
-        clase, confianza = clasificar_imagen(imagen)
-
-        porcentaje = confianza * 100
-
-        st.write(f"Clase detectada: {clase}")
-
-        st.write(f"Confianza: {porcentaje:.1f}%")
-
-        dueños = ["dueno", "dueno2"]
-
-        # =================================================
-        # DUEÑO
-        # =================================================
-        if clase.lower() in dueños and porcentaje >= 40:
-
-            st.success("✅ Dueño reconocido")
-
-            st.write(f"Acceso permitido ({porcentaje:.1f}%)")
-
-            st.session_state.puerta_abierta = True
-
-            enviar_mqtt("Abre")
-
-        # =================================================
-        # DESCONOCIDO
-        # =================================================
+        if st.session_state.alarma_activa:
+            st.error("🚨 ALERTA: Presencia detectada")
+            enviar_mqtt("intruso")
         else:
-
-            st.error("🚨 PERSONA DESCONOCIDA")
-
-            st.write(f"Acceso denegado ({porcentaje:.1f}%)")
-
-            st.session_state.puerta_abierta = False
-
-            enviar_mqtt("Cierra")
+            st.success("✅ Monitoreo realizado (alarma apagada)")
 
     else:
-
         st.markdown(
             "<h3 style='color:black; text-align:center;'>📷 Esperando captura...</h3>",
             unsafe_allow_html=True
@@ -461,11 +331,7 @@ with col2:
 # FOOTER
 # =========================================================
 st.markdown("---")
-
 st.markdown(
-    "<p style='color:black; text-align:center;'>"
-    "Guardian Vision © Proyecto Interfaces Multimodales | "
-    "Angie Vargas - Isabella Saldarriaga - Salome Rivero"
-    "</p>",
+    "<p style='color:black; text-align:center;'>Guardian Vision ©️ Proyecto Interfaces Multimodales | Angie Vargas - Isabella Saldarriaga - Salome Rivero</p>",
     unsafe_allow_html=True
 )
