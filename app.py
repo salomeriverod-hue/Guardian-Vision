@@ -1,5 +1,5 @@
 # =========================================================
-# GUARDIAN VISION - VOZ + TEACHABLE MACHINE + WOKWI
+# GUARDIAN VISION - CÓDIGO COMPLETO CON VOZ CORREGIDA
 # =========================================================
 
 import streamlit as st
@@ -8,8 +8,6 @@ import json
 from PIL import Image
 from bokeh.models import Button, CustomJS
 from streamlit_bokeh_events import streamlit_bokeh_events
-import numpy as np
-import tensorflow as tf
 
 # =========================================================
 # CONFIGURACIÓN GENERAL
@@ -96,9 +94,7 @@ st.markdown("""
 # SIDEBAR
 # =========================================================
 with st.sidebar:
-
     st.title("📘 Instrucciones")
-
     st.write("### 🎙️ Control por Voz")
     st.write("Presiona ESCUCHAR y di:")
     st.write("- enciende la alarma")
@@ -108,72 +104,27 @@ with st.sidebar:
     st.write("- Botón ENCENDER")
     st.write("- Botón APAGAR")
 
-    st.write("### 📸 Reconocimiento Facial")
-    st.write("Clases del modelo:")
-    st.code("dueno\ndueno2\ndesconocido")
+    st.write("### 📸 Vigilancia")
+    st.write("Toma una foto para monitorear.")
+    st.write("Si la alarma está activa, enviará alerta MQTT.")
 
 # =========================================================
 # MQTT
 # =========================================================
 BROKER = "broker.mqttdashboard.com"
 PORT = 1883
-TOPIC = "IMIA"
+TOPIC = "voice_ctrl"
 
 @st.cache_resource
 def setup_mqtt():
-
     client = mqtt.Client(client_id="ANGIE_GUARD")
-
     try:
         client.connect(BROKER, PORT, 60)
     except:
         pass
-
     return client
 
 mqtt_client = setup_mqtt()
-
-# =========================================================
-# MODELO TEACHABLE MACHINE
-# =========================================================
-@st.cache_resource
-def cargar_modelo():
-
-    modelo = tf.keras.models.load_model(
-        "keras_model.h5",
-        compile=False
-    )
-
-    with open("labels.txt", "r") as f:
-
-        labels = [
-            line.strip().split(" ", 1)[1]
-            for line in f.readlines()
-        ]
-
-    return modelo, labels
-
-modelo, labels = cargar_modelo()
-
-def clasificar_imagen(imagen_pil):
-
-    img = imagen_pil.convert("RGB").resize((224, 224))
-
-    arr = np.array(img, dtype=np.float32)
-
-    arr = (arr / 127.5) - 1
-
-    arr = np.expand_dims(arr, axis=0)
-
-    predicciones = modelo.predict(arr, verbose=0)
-
-    idx = np.argmax(predicciones[0])
-
-    confianza = float(predicciones[0][idx])
-
-    clase = labels[idx]
-
-    return clase, confianza
 
 # =========================================================
 # SESSION STATE
@@ -188,15 +139,9 @@ if "ultimo_comando" not in st.session_state:
 # FUNCIÓN MQTT
 # =========================================================
 def enviar_mqtt(mensaje):
-
     try:
-
-        payload = json.dumps({
-            "gesto": mensaje
-        })
-
+        payload = json.dumps({"Act1": mensaje})
         mqtt_client.publish(TOPIC, payload)
-
     except:
         pass
 
@@ -210,18 +155,19 @@ col1, col2 = st.columns([1, 2])
 # =========================================================
 with col1:
 
+    # ESTADO
     if st.session_state.alarma_activa:
         panel_bg = "#dcfce7"
         panel_border = "#16a34a"
         panel_text = "#166534"
         estado_texto = "🟢 ALARMA ACTIVADA"
-
     else:
         panel_bg = "#fee2e2"
         panel_border = "#dc2626"
         panel_text = "#991b1b"
         estado_texto = "🔴 ALARMA DESACTIVADA"
 
+    # TÍTULO
     st.markdown(f"""
     <div style="
         background-color:{panel_bg};
@@ -245,7 +191,6 @@ with col1:
         if (!SpeechRecognition) {
             alert("El navegador no soporta reconocimiento de voz");
         } else {
-
             var recognition = new SpeechRecognition();
 
             recognition.lang = 'es-ES';
@@ -253,7 +198,6 @@ with col1:
             recognition.interimResults = false;
 
             recognition.onresult = function(e) {
-
                 var value = e.results[0][0].transcript;
 
                 document.dispatchEvent(
@@ -261,6 +205,10 @@ with col1:
                         detail: value
                     })
                 );
+            };
+
+            recognition.onerror = function(e) {
+                console.log("Error:", e.error);
             };
 
             recognition.start();
@@ -277,12 +225,12 @@ with col1:
     )
 
     # =====================================================
-    # PROCESAR VOZ
+    # PROCESAR VOZ CORREGIDO
     # =====================================================
     if result:
+        st.write("DEBUG RESULTADO:", result)
 
         if "GET_TEXT" in result:
-
             comando = result.get("GET_TEXT", "").strip().lower()
 
             st.session_state.ultimo_comando = comando
@@ -296,11 +244,8 @@ with col1:
                 "activar" in comando or
                 "encender" in comando
             ):
-
                 st.session_state.alarma_activa = True
-
-                enviar_mqtt("Cierra")
-
+                enviar_mqtt("activado")
                 st.success("🟢 Alarma ACTIVADA")
 
             elif (
@@ -310,45 +255,34 @@ with col1:
                 "desactivar" in comando or
                 "apagar" in comando
             ):
-
                 st.session_state.alarma_activa = False
-
-                enviar_mqtt("Abre")
-
+                enviar_mqtt("desactivado")
                 st.warning("🔴 Alarma DESACTIVADA")
 
             else:
-
-                st.error("⚠️ Comando no reconocido")
+                st.error("⚠️ Comando no reconocido. Intenta de nuevo.")
 
     # =====================================================
     # ÚLTIMO COMANDO
     # =====================================================
     st.markdown("<h3 style='color:black;'>🗣️ Último comando:</h3>", unsafe_allow_html=True)
-
     st.info(st.session_state.ultimo_comando)
 
     # =====================================================
     # BOTONES MANUALES
     # =====================================================
     if st.button("🟢 ENCENDER ALARMA"):
-
         st.session_state.alarma_activa = True
-
         st.session_state.ultimo_comando = "Encendido manual"
-
-        enviar_mqtt("Cierra")
+        enviar_mqtt("activado")
 
     if st.button("🔴 APAGAR ALARMA"):
-
         st.session_state.alarma_activa = False
-
         st.session_state.ultimo_comando = "Apagado manual"
-
-        enviar_mqtt("Abre")
+        enviar_mqtt("desactivado")
 
     # =====================================================
-    # ESTADO
+    # ESTADO DEL SISTEMA
     # =====================================================
     st.markdown(f"""
     <div style="
@@ -365,10 +299,9 @@ with col1:
     """, unsafe_allow_html=True)
 
 # =========================================================
-# PANEL DERECHO
+# PANEL DERECHO - CÁMARA
 # =========================================================
 with col2:
-
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
     st.markdown("<h2 style='color:black;'>📸 Cámara de Vigilancia</h2>", unsafe_allow_html=True)
@@ -376,49 +309,17 @@ with col2:
     foto = st.camera_input("Toma una captura de seguridad")
 
     if foto is not None:
-
         imagen = Image.open(foto)
 
         st.image(imagen, caption="Captura actual", use_container_width=True)
 
-        clase, confianza = clasificar_imagen(imagen)
-
-        porcentaje = confianza * 100
-
-        st.write(f"Clase detectada: {clase}")
-
-        st.write(f"Confianza: {porcentaje:.1f}%")
-
-        dueños = ["dueno", "dueno2"]
-
-        # =====================================================
-        # DUEÑO RECONOCIDO
-        # =====================================================
-        if clase.lower() in dueños and porcentaje >= 40:
-
-            st.success("✅ Dueño reconocido")
-
-            st.write(f"Acceso permitido ({porcentaje:.1f}%)")
-
-            st.session_state.alarma_activa = False
-
-            enviar_mqtt("Abre")
-
-        # =====================================================
-        # DESCONOCIDO
-        # =====================================================
+        if st.session_state.alarma_activa:
+            st.error("🚨 ALERTA: Presencia detectada")
+            enviar_mqtt("intruso")
         else:
-
-            st.error("🚨 PERSONA DESCONOCIDA")
-
-            st.write(f"Acceso denegado ({porcentaje:.1f}%)")
-
-            st.session_state.alarma_activa = True
-
-            enviar_mqtt("Alarma")
+            st.success("✅ Monitoreo realizado (alarma apagada)")
 
     else:
-
         st.markdown(
             "<h3 style='color:black; text-align:center;'>📷 Esperando captura...</h3>",
             unsafe_allow_html=True
@@ -430,7 +331,6 @@ with col2:
 # FOOTER
 # =========================================================
 st.markdown("---")
-
 st.markdown(
     "<p style='color:black; text-align:center;'>Guardian Vision © Proyecto Interfaces Multimodales | Angie Vargas - Isabella Saldarriaga - Salome Rivero</p>",
     unsafe_allow_html=True
